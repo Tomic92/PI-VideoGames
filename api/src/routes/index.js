@@ -9,20 +9,22 @@ const e = require('cors');
 const router = Router();
 const {API_KEY} = process.env
 
-// Configurar los routers
+/* // Configurar los routers
 // Ejemplo: router.use('/auth', authRouter);
 
 // GET https://api.rawg.io/api/games
 // GET https://api.rawg.io/api/games?search={game}
 // GET https://api.rawg.io/api/genres
-// GET https://api.rawg.io/api/games/{id}
+// GET https://api.rawg.io/api/games/{id} */
 
 // [ ] GET /videogames:
 // Obtener un listado de los videojuegos
-// Debe devolver solo los datos necesarios para la ruta principal
+// Debe devolver solo los datos necesarios para la ruta principal, y
+// [ ] GET /videogames?name="...":
+// Obtener un listado de las primeros 15 videojuegos que contengan la palabra ingresada como query parameter
+// Si no existe ningún videojuego mostrar un mensaje adecuado
 
 const getGamesAPI = async () => {
-
   let juegos=[]
   for (let i = 1; i <= 5; i++) {
     let {results} = (await axios.get(`https://api.rawg.io/api/games?key=${API_KEY}&page=${i}`)).data
@@ -35,7 +37,7 @@ const getGamesAPI = async () => {
                           released: e.released,
                           rating: e.rating,
                           platforms: e.platforms.map(e=>e.platform.name),
-                          background_image: e.background_image,
+                          image: e.background_image,
                           genres: e.genres.map(e=>e.name)
                         }))
   return data
@@ -51,7 +53,7 @@ const getGamesBd = async ()=>{
         "released",
         "rating",
         "platforms",
-        "background_image"]
+        "image"]
       // }
       ,
       include:{
@@ -60,6 +62,7 @@ const getGamesBd = async ()=>{
     }
   })
 }
+
 const getAllVideogames = async ()=>{
   let apiInfo = await getGamesAPI()
   let dbInfo = await getGamesBd()
@@ -83,49 +86,23 @@ router.get('/videogames', async (req,res,next)=>{
                     released: e.released,
                     rating: e.rating,
                     platforms: e.platforms.map(e=>e.platform.name),
-                    background_image: e.background_image,
+                    image: e.background_image,
                     genres: e.genres.map(e=>e.name)
       }))
       if (gamesApi.length) games.push(gamesApi)
 
       return games.length ? 
       res.status(201).send(games.flat().slice(0,15)) :
-      res.status(401).send("No se encuentra el videojuego")
+      res.status(400).send("No se encuentra el videojuego")
     }else {
       let videogames = await getAllVideogames()
-      return res.status(203).send(videogames)
+      return res.status(202).send(videogames)
     }
       
-      // else {
-      //   let gamesBd = Videogame.findALL({
-      //     where:{
-      //       name: name
-      //     },
-      //     include: Genre
-      //   })
-      //   gamesBd = JSON.stringify(gamesBd);
-      //   gamesBd = JSON.parse(gamesBd);
-
-      //   return games.length ? 
-      //   res.status(202).send(games.slice(0,15)) :
-      //   res.status(401).send("No se encuentra el videojuego")
-
-      //   // let videogames = await getAllVideogames()
-      //   // let videogame = videogames.filter(e=>e.name.toLowerCase().includes(name.toLowerCase()))
-      // }
-
   } catch (error) {
-    res.status(402).json(console.log(error))
+    console.log(error)
   }
 })
-
-
-
-// [ ] GET /videogames?name="...":
-// Obtener un listado de las primeros 15 videojuegos que contengan la palabra ingresada como query parameter
-// Si no existe ningún videojuego mostrar un mensaje adecuado
-
-// INCLUIDO EN EL DE ARRIBA ↑
 
 // [ ] GET /videogame/{idVideogame}:
 // Obtener el detalle de un videojuego en particular
@@ -134,12 +111,45 @@ router.get('/videogames', async (req,res,next)=>{
 /* name, id, description, released, rating, platforms */
 
 router.get("/videogames/:id", async (req, res)=>{
-  const id = req.params.id
-
-  let games = await getAllVideogames()
-
-  const foundAPI = games.find(d => d.id === Number(id))
+  let {id} = req.params
   
+  if(Number(id)) id = Number(id)
+
+  try {
+    if(typeof id === 'number'){
+
+      let gameApi = (await axios(`https://api.rawg.io/api/games/${id}?key=${API_KEY}`)).data
+      gameApi = {
+                    name: gameApi.name,
+                    id: gameApi.id,
+                    description: gameApi.description,
+                    released: gameApi.released,
+                    rating: gameApi.rating,
+                    platforms: gameApi.platforms.map(e=>e.platform.name),
+                    image: gameApi.background_image,
+                    genres: gameApi.genres.map(e=>e.name)
+      }
+
+      return gameApi ? 
+      res.status(201).send(gameApi) :
+      res.status(400).send("No se encuentra el videojuego")
+
+    }else if(typeof id === 'string'){
+
+      let gameBd = await getGamesBd()
+      gameBd = gameBd.filter(e=>e.id.includes(id))
+
+      return gameBd.length ? 
+      res.status(202).send(gameBd) :
+      res.status(401).send("No se encuentra el videojuego")
+
+    }else{
+      return res.status(402).send("No se encuentra el videojuego")
+    }
+  } catch (error) {
+    console.log(error)
+  } 
+  /* 
   if(!foundAPI){
     let foundDB = Videogame.findOne({
       where:{
@@ -150,26 +160,9 @@ router.get("/videogames/:id", async (req, res)=>{
 
     // foundDB = JSON.stringify(foundDB);
     foundDB = JSON.parse(foundDB);
-    return res.status(200).json(foundDB)
+    return res.status(201).json(foundDB)
+  }*/
 
-  }else if(foundAPI){
-    let idApi = (await axios.get(`https://api.rawg.io/api/games/${Number(id)}?key=${API_KEY}`)).data
-
-    let game = {
-      name: idApi.name,
-      imagen: idApi.background_image,
-      genres: idApi.genres.map((curr) => curr.name),
-      description: idApi.description,
-      released: idApi.released,
-      rating: idApi.rating,
-      background_image: idApi.background_image,
-      platforms: idApi.platforms.map(d => d.platform.name)
-    }
-
-    return res.status(200).json(game)
-  }
-
-  return res.status(400).json("Ningún juego encontrado por id")
 
 })
 
@@ -181,14 +174,14 @@ router.get("/videogames/:id", async (req, res)=>{
 router.post('/videogames', async (req,res,next) => {
   let { name, description, platforms } = req.body
   if (!name || !description || !platforms) {
-    return res.status(404).send('Falta enviar datos obligatorios')
+    return res.status(401).send('Falta enviar datos obligatorios')
   }
   // res.status(201).send({ name, description, platforms })
     try {
     const newVideogame = await Videogame.create(req.body)
     res.status(201).send(newVideogame)
   } catch (error) {
-    res.status(404).send('Error en alguno de los datos provistos')
+    res.status(402).send('Error en alguno de los datos provistos')
   }
 })
 
